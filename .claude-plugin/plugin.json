@@ -1,0 +1,20 @@
+{
+  "name": "claude-code-wrapped",
+  "description": "Generate your Claude Code Wrapped — sessions, tools, streaks, and coding personality visualized and shareable",
+  "version": "0.1.0",
+  "author": {
+    "name": "Jarrod Watts",
+    "url": "https://github.com/jarrodwatts"
+  },
+  "homepage": "https://github.com/jarrodwatts/claude-code-wrapped-plugin",
+  "repository": "https://github.com/jarrodwatts/claude-code-wrapped-plugin",
+  "license": "MIT",
+  "keywords": [
+    "wrapped",
+    "stats",
+    "analytics",
+    "share",
+    "personality",
+    "archetype"
+  ]
+}
