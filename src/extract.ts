@@ -343,6 +343,7 @@ function extract(): WrappedPayload {
   const tools: Record<string, number> = {};
   let totalMessages = 0;
   let commitCount = 0;
+  let linesChanged = 0;
   let longestSessionMinutes = 0;
   const projectMessageCounts: Record<string, number> = {};
 
@@ -396,6 +397,24 @@ function extract(): WrappedPayload {
                   .input;
                 if (input?.command?.includes("git commit")) {
                   commitCount++;
+                }
+              }
+
+              // Count lines changed from Edit tool
+              if (block.name === "Edit") {
+                const input = (block as { input?: { old_string?: string; new_string?: string } }).input;
+                if (input?.new_string) {
+                  const newLines = (input.new_string.match(/\n/g) || []).length + 1;
+                  const oldLines = input.old_string ? (input.old_string.match(/\n/g) || []).length + 1 : 0;
+                  linesChanged += Math.abs(newLines - oldLines) + Math.min(newLines, oldLines);
+                }
+              }
+
+              // Count lines changed from Write tool
+              if (block.name === "Write") {
+                const input = (block as { input?: { content?: string } }).input;
+                if (input?.content) {
+                  linesChanged += (input.content.match(/\n/g) || []).length + 1;
                 }
               }
             }
@@ -496,7 +515,7 @@ function extract(): WrappedPayload {
       hours: Math.round(totalHours * 10) / 10,
       days: activeDays,
       commits: commitCount,
-      linesChanged: 0,
+      linesChanged,
     },
     tools,
     timePatterns: {
@@ -582,6 +601,7 @@ async function main(): Promise<void> {
   console.error(`  Messages: ${payload.stats.messages}`);
   console.error(`  Hours: ${payload.stats.hours}`);
   console.error(`  Active Days: ${payload.stats.days}`);
+  console.error(`  Lines Changed: ${payload.stats.linesChanged}`);
   console.error(`  Tools Used: ${Object.keys(payload.tools).length}`);
   console.error(`  Projects: ${payload.projectCount}`);
   console.error(`  Longest Streak: ${payload.highlights.longestStreak} days`);
