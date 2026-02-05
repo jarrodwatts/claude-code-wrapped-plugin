@@ -34,31 +34,39 @@ interface FacetData {
 }
 
 interface WrappedPayload {
+  version: 1;
   stats: {
     sessions: number;
     messages: number;
     hours: number;
     days: number;
     commits: number;
+    linesChanged: number;
   };
   tools: Record<string, number>;
   timePatterns: {
     hourDistribution: Record<string, number>;
     dayOfWeekDistribution: Record<string, number>;
-    dailyActivity: Record<string, number>;
+    peakHour: number;
+    peakDay: number;
   };
   projectCount: number;
   goals: Record<string, number>;
   archetype: string;
   highlights: {
     busiestDay: string;
-    busiestDayCount: number;
+    busiestDayMessages: number;
     longestStreak: number;
     longestSessionMinutes: number;
+    rarestTool: string;
     firstSessionDate: string;
-    topProject: string;
-    rareToolName: string | null;
-    rareToolCount: number | null;
+    topToolName: string;
+    topToolCount: number;
+  };
+  streaks: {
+    current: number;
+    longest: number;
+    totalActiveDays: number;
   };
 }
 
@@ -216,6 +224,34 @@ function scoreArchetype(payload: Omit<WrappedPayload, "archetype">): string {
     msgsPerSession > 20 ? 100 : (msgsPerSession / 20) * 80;
 
   return Object.entries(scores).sort(([, a], [, b]) => b - a)[0]![0];
+}
+
+function calculateCurrentStreak(dailyActivity: Record<string, number>): number {
+  const today = new Date();
+  let streak = 0;
+  const d = new Date(today);
+
+  while (true) {
+    const key = d.toISOString().slice(0, 10);
+    if ((dailyActivity[key] ?? 0) > 0) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    } else if (streak === 0) {
+      // Allow today to be missing (user hasn't coded yet today)
+      d.setDate(d.getDate() - 1);
+      const yesterdayKey = d.toISOString().slice(0, 10);
+      if ((dailyActivity[yesterdayKey] ?? 0) > 0) {
+        streak++;
+        d.setDate(d.getDate() - 1);
+      } else {
+        break;
+      }
+    } else {
+      break;
+    }
+  }
+
+  return streak;
 }
 
 function calculateLongestStreak(dailyActivity: Record<string, number>): number {
@@ -416,51 +452,78 @@ function extract(): WrappedPayload {
     ([, a], [, b]) => b - a
   )[0];
 
-  // Find rarest tool (used exactly once or the least-used)
-  const sortedTools = Object.entries(tools).sort(([, a], [, b]) => a - b);
-  const rarest = sortedTools[0];
+  // Find rarest tool (least-used)
+  const sortedToolsAsc = Object.entries(tools).sort(([, a], [, b]) => a - b);
+  const rarest = sortedToolsAsc[0];
 
-  // Find top project by message count
-  const topProject = Object.entries(projectMessageCounts).sort(
-    ([, a], [, b]) => b - a
-  )[0];
+  // Find top tool (most-used)
+  const sortedToolsDesc = Object.entries(tools).sort(([, a], [, b]) => b - a);
+  const topTool = sortedToolsDesc[0];
 
   const activeDays = Object.keys(dailyActivity).filter(
     (k) => (dailyActivity[k] ?? 0) > 0
   ).length;
 
-  const streak = calculateLongestStreak(dailyActivity);
+  const longestStreak = calculateLongestStreak(dailyActivity);
+  const currentStreak = calculateCurrentStreak(dailyActivity);
 
-  const payloadWithoutArchetype: Omit<WrappedPayload, "archetype"> = {
+  // Compute peak hour and peak day from distributions
+  const peakHour = Number(
+    Object.entries(hourDistribution).sort(([, a], [, b]) => b - a)[0]?.[0] ?? "0"
+  );
+  const peakDay = Number(
+    Object.entries(dayOfWeekDistribution).sort(([, a], [, b]) => b - a)[0]?.[0] ?? "0"
+  );
+
+  // Filter goals to only include valid categories
+  const validGoalCategories = new Set([
+    "bug_fix", "feature", "refactor", "devops", "docs", "explore", "test", "other",
+  ]);
+  const filteredGoals: Record<string, number> = {};
+  for (const [cat, count] of Object.entries(goals)) {
+    if (validGoalCategories.has(cat)) {
+      filteredGoals[cat] = (filteredGoals[cat] ?? 0) + count;
+    } else {
+      filteredGoals["other"] = (filteredGoals["other"] ?? 0) + count;
+    }
+  }
+
+  const payloadWithoutArchetype = {
+    version: 1 as const,
     stats: {
       sessions: sessionSet.size,
       messages: totalMessages,
       hours: Math.round(totalHours * 10) / 10,
       days: activeDays,
       commits: commitCount,
+      linesChanged: 0,
     },
     tools,
     timePatterns: {
       hourDistribution,
       dayOfWeekDistribution,
-      dailyActivity,
+      peakHour,
+      peakDay,
     },
     projectCount: projectSet.size,
-    goals,
+    goals: filteredGoals,
     highlights: {
       busiestDay: busiestDay?.[0] ?? new Date().toISOString().slice(0, 10),
-      busiestDayCount: busiestDay?.[1] ?? 0,
-      longestStreak: streak,
+      busiestDayMessages: busiestDay?.[1] ?? 0,
+      longestStreak,
       longestSessionMinutes: Math.round(longestSessionMinutes),
+      rarestTool: rarest?.[0] ?? "None",
       firstSessionDate:
         firstTimestamp < Infinity
           ? new Date(firstTimestamp).toISOString().slice(0, 10)
           : new Date().toISOString().slice(0, 10),
-      topProject: topProject
-        ? topProject[0]!.replace(/^-Users-[^-]+-/, "")
-        : "Unknown",
-      rareToolName: rarest ? rarest[0] : null,
-      rareToolCount: rarest ? rarest[1] : null,
+      topToolName: topTool?.[0] ?? "None",
+      topToolCount: topTool?.[1] ?? 0,
+    },
+    streaks: {
+      current: currentStreak,
+      longest: longestStreak,
+      totalActiveDays: activeDays,
     },
   };
 
