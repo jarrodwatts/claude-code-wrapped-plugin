@@ -5,7 +5,7 @@ import * as path from "node:path";
 import * as https from "node:https";
 
 const CLAUDE_DIR = path.join(process.env.HOME ?? "~", ".claude");
-const API_URL = "https://claude-code-wrapped.vercel.app/api/wrapped";
+const API_URL = "https://ccwrapped.com/api/wrapped";
 
 // --- Types ---
 
@@ -611,7 +611,7 @@ async function main(): Promise<void> {
 
   try {
     const slug = await postPayload(payload);
-    const url = `https://claude-code-wrapped.vercel.app/w/${slug}`;
+    const url = `https://ccwrapped.com/w/${slug}`;
     console.log(url);
     console.error(`\nYour Wrapped is ready! URL: ${url}`);
   } catch (err) {
